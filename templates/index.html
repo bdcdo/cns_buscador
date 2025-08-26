@@ -136,6 +136,8 @@
         
         .results-list {
             /* Remove altura máxima para permitir scroll da página */
+            margin: 0;
+            padding: 0;
         }
         
         .result-item {
@@ -181,6 +183,12 @@
             line-height: 1.5;
             word-wrap: break-word;
             overflow-wrap: break-word;
+        }
+
+        .result-item mark {
+            background: #fff3cd;
+            padding: 2px;
+            border-radius: 2px;
         }
         
         
@@ -402,7 +410,7 @@
                 // Escapa caracteres especiais regex
                 const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 const regex = new RegExp(`(${escapedWord})`, 'gi');
-                highlightedText = highlightedText.replace(regex, '<mark style="background: #fff3cd; padding: 2px;">$1</mark>');
+                highlightedText = highlightedText.replace(regex, '<mark>$1</mark>');
             });
             
             return highlightedText;
