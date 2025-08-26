@@ -27,7 +27,7 @@ templates = Jinja2Templates(directory="templates")
 search_engine = CNSSearchEngine()
 
 # Carrega o índice ou cria um novo
-csv_path = os.path.join(os.path.dirname(__file__), 'cns_resolucoes_com_textos_20250818_132004.csv')
+csv_path = os.path.join(os.path.dirname(__file__), 'cns_resolucoes_com_textos_20250826_150444.csv')
 if not search_engine.load_index():
     print("Criando novo índice...")
     if os.path.exists(csv_path):

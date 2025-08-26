@@ -61,8 +61,9 @@ class TextProcessor:
         
         # Encontra a posição com mais termos de busca próximos
         for i in range(0, len(text) - max_length, 20):
-            snippet = text[i:i + max_length].lower()
-            matches = sum(1 for term in query_terms if term.lower() in snippet)
+            snippet_text = text[i:i + max_length]
+            snippet_tokens = set(self.tokenize(snippet_text))
+            matches = sum(1 for term in query_terms if term.lower() in snippet_tokens)
             if matches > max_matches:
                 max_matches = matches
                 best_position = i
@@ -96,57 +97,77 @@ class InvertedIndex:
                 self.index[f"title:{token}"].add(doc_id)  # tokens do título com prefixo
         
         # Indexa texto do PDF
-        if 'texto_pdf' in document and not pd.isna(document['texto_pdf']):
-            text_tokens = self.processor.tokenize(document['texto_pdf'])
+        if 'texto' in document and not pd.isna(document['texto']):
+            text_tokens = self.processor.tokenize(document['texto'])
             for token in text_tokens:
                 self.index[token].add(doc_id)
     
     def search(self, query: str) -> List[int]:
         """Busca documentos que correspondem à query"""
         return self._parse_boolean_query(query)
-    
+
     def _parse_boolean_query(self, query: str) -> List[int]:
-        """Analisa query com operadores booleanos"""
+        """Analisa query com operadores booleanos e parênteses."""
         query = query.strip()
         
         # Suporte para frases entre aspas
         phrase_pattern = r'"([^"]+)"'
         phrases = re.findall(phrase_pattern, query)
-        query_without_phrases = re.sub(phrase_pattern, '', query)
         
+        # Substitui frases por placeholders para não interferir com a lógica de parênteses
+        placeholder_offset = 1000 # Evita colisão com placeholders de parênteses
+        for i, phrase in enumerate(phrases):
+            query = query.replace(f'"{phrase}"', f'__PHRASE__{i+placeholder_offset}__', 1)
+
+        sub_results = {}
+        # Armazena resultados de frases primeiro
+        for i, phrase in enumerate(phrases):
+            placeholder = f'__PHRASE__{i+placeholder_offset}__'
+            sub_results[placeholder] = set(self._search_phrase(phrase))
+
+        # Processa parênteses iterativamente, dos mais internos para os mais externos
+        placeholder_id = 0
+        while '(' in query:
+            match = re.search(r'\(([^()]+)\)', query)
+            if not match:
+                # Se não houver mais parênteses simples, pode haver um erro de aninhamento
+                # ou a query está mal formada. Retornamos um resultado vazio para segurança.
+                return [] 
+
+            sub_query = match.group(1)
+            placeholder = f'__SUB__{placeholder_id}__'
+            
+            # Avalia a subquery simples
+            result_set = self._evaluate_simple_query(sub_query, sub_results)
+            sub_results[placeholder] = result_set
+            
+            # Substitui a subquery pelo placeholder
+            query = query.replace(match.group(0), placeholder, 1)
+            placeholder_id += 1
+
+        # Avalia a query final (agora plana)
+        final_result_set = self._evaluate_simple_query(query, sub_results)
+        return list(final_result_set)
+
+    def _evaluate_simple_query(self, query: str, sub_results: Dict[str, Set[int]]) -> Set[int]:
+        """Avalia uma query booleana 'plana' (sem parênteses)."""
         # Parse operadores OR
-        or_parts = [part.strip() for part in query_without_phrases.split(' OR ')]
+        or_parts = [part.strip() for part in query.split(' OR ')]
         
-        result_sets = []
+        final_result = set()
         
         for or_part in or_parts:
             if not or_part:
                 continue
-                
+            
             # Parse operadores AND e NOT para esta parte
-            and_result = self._parse_and_not(or_part)
-            if and_result:
-                result_sets.append(set(and_result))
+            and_result = self._parse_and_not(or_part, sub_results)
+            final_result.update(and_result)
         
-        # Processa frases
-        for phrase in phrases:
-            phrase_results = self._search_phrase(phrase)
-            if phrase_results:
-                result_sets.append(set(phrase_results))
-        
-        if not result_sets:
-            return []
-        
-        # União de todos os conjuntos (OR implícito entre diferentes partes)
-        final_result = set()
-        for result_set in result_sets:
-            final_result.update(result_set)
-        
-        return list(final_result)
-    
-    def _parse_and_not(self, query_part: str) -> List[int]:
+        return final_result
+
+    def _parse_and_not(self, query_part: str, sub_results: Dict[str, Set[int]]) -> Set[int]:
         """Analisa parte da query com AND e NOT"""
-        # Divide em termos positivos e negativos
         parts = query_part.split()
         positive_terms = []
         negative_terms = []
@@ -163,28 +184,36 @@ class InvertedIndex:
                 i += 1
         
         if not positive_terms:
-            return []
+            return set()
         
         # Busca termos positivos (AND implícito)
         result_sets = []
         for term in positive_terms:
-            term_results = self._search_term(term)
-            if not term_results:
-                return []  # Se algum termo não existe, sem resultados
-            result_sets.append(set(term_results))
+            if term.startswith('__SUB__') or term.startswith('__PHRASE__'):
+                term_results = sub_results.get(term, set())
+            else:
+                term_results = set(self._search_term(term))
+            
+            result_sets.append(term_results)
         
         # Interseção de todos os conjuntos positivos
-        result = result_sets[0]
+        if not result_sets:
+            return set()
+            
+        result = result_sets[0].copy()
         for result_set in result_sets[1:]:
-            result = result.intersection(result_set)
+            result.intersection_update(result_set)
         
         # Remove termos negativos
         for negative_term in negative_terms:
-            negative_results = set(self._search_term(negative_term))
-            result = result - negative_results
+            if negative_term.startswith('__SUB__') or negative_term.startswith('__PHRASE__'):
+                negative_results = sub_results.get(negative_term, set())
+            else:
+                negative_results = set(self._search_term(negative_term))
+            result.difference_update(negative_results)
         
-        return list(result)
-    
+        return result
+
     def _search_term(self, term: str) -> List[int]:
         """Busca um termo específico"""
         normalized_term = self.processor.normalize_text(term)
@@ -199,6 +228,7 @@ class InvertedIndex:
             return []
         
         # Começa com documentos que contêm o primeiro token
+        # Usamos set() para garantir que a busca inicial seja em um conjunto
         candidate_docs = set(self._search_term(phrase_tokens[0]))
         
         # Filtra documentos que realmente contêm a frase
@@ -208,11 +238,11 @@ class InvertedIndex:
             text_content = ""
             if 'titulo' in doc:
                 text_content += doc['titulo'] + " "
-            if 'texto_pdf' in doc and not pd.isna(doc['texto_pdf']):
-                text_content += str(doc['texto_pdf'])
+            if 'texto' in doc and not pd.isna(doc['texto']):
+                text_content += str(doc['texto'])
             
             normalized_content = self.processor.normalize_text(text_content)
-            normalized_phrase = self.processor.normalize_text(phrase)
+            normalized_phrase = ' '.join(phrase_tokens) # Usa os tokens normalizados para a busca
             
             if normalized_phrase in normalized_content:
                 result_docs.append(doc_id)
@@ -281,7 +311,7 @@ class CNSSearchEngine:
             score = self._calculate_score(doc, query_tokens)
             
             snippet = self.processor.extract_snippet(
-                str(doc.get('texto_pdf', '')), 
+                str(doc.get('texto', '')), 
                 query_tokens
             )
             
@@ -305,16 +335,16 @@ class CNSSearchEngine:
         
         # Score baseado no título (peso maior)
         if 'titulo' in document:
-            title_text = self.processor.normalize_text(document['titulo'])
+            title_tokens = set(self.processor.tokenize(document['titulo']))
             for token in query_tokens:
-                if token in title_text:
+                if token in title_tokens:
                     score += 3.0
         
         # Score baseado no texto do PDF
-        if 'texto_pdf' in document and not pd.isna(document['texto_pdf']):
-            pdf_text = self.processor.normalize_text(str(document['texto_pdf']))
+        if 'texto' in document and not pd.isna(document['texto']):
+            pdf_tokens = self.processor.tokenize(str(document['texto']))
             for token in query_tokens:
-                count = pdf_text.count(token)
+                count = pdf_tokens.count(token)
                 score += count * 1.0
         
         return score
@@ -333,7 +363,7 @@ if __name__ == "__main__":
     engine = CNSSearchEngine()
     
     # Carrega dados
-    engine.load_data('../cns_resolucoes_com_textos_20250818_132004.csv')
+    engine.load_data('/home/bdcdo/Desktop/dev/10_cns_buscador/cns_resolucoes_com_textos_20250826_150444.csv')
     
     # Salva índice
     engine.save_index()
@@ -344,7 +374,8 @@ if __name__ == "__main__":
         "saúde AND mental",
         "saúde OR medicina",
         '"saúde pública"',
-        "saúde NOT privada"
+        "saúde NOT privada",
+        '(saúde AND mulher) OR "direitos humanos"' # Novo exemplo com parênteses
     ]
     
     for query in queries:
