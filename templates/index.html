@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador CNS - Resoluções</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            overflow-x: hidden;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            color: #2c5282;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .search-box {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        #search-input {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        #search-input:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+        
+        #search-btn {
+            padding: 15px 30px;
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        #search-btn:hover {
+            background: #3182ce;
+        }
+        
+        .help-text {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        
+        .examples {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .example {
+            background: #f7fafc;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            color: #4a5568;
+            cursor: pointer;
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s;
+        }
+        
+        .example:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+        }
+        
+        .results-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+            overflow: hidden;
+        }
+        
+        .results-header {
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .results-list {
+            /* Remove altura máxima para permitir scroll da página */
+        }
+        
+        .result-item {
+            padding: 20px;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background 0.3s;
+        }
+        
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .result-item:hover {
+            background: #f8fafc;
+        }
+        
+        .result-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        
+        .result-title a {
+            color: #2d3748;
+            text-decoration: none;
+        }
+        
+        .result-title a:hover {
+            color: #4299e1;
+        }
+        
+        .result-meta {
+            font-size: 0.9em;
+            color: #718096;
+            margin-bottom: 10px;
+        }
+        
+        .result-snippet {
+            color: #4a5568;
+            line-height: 1.5;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px;
+        }
+        
+        
+        @media (max-width: 768px) {
+            .search-form {
+                flex-direction: column;
+            }
+            
+            .examples {
+                justify-content: center;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Buscador CNS</h1>
+            <p>Sistema de busca nas resoluções do Conselho Nacional de Saúde</p>
+        </div>
+        
+        
+        <div class="search-box">
+            <form class="search-form" id="search-form">
+                <input type="text" id="search-input" placeholder="Digite sua busca aqui..." autocomplete="off">
+                <button type="submit" id="search-btn">Buscar</button>
+            </form>
+            
+            <div class="help-text">
+                <strong>Dicas de busca:</strong> Use aspas para frases exatas, AND/OR para operadores booleanos, NOT para exclusão.
+            </div>
+            
+            <div class="examples">
+                <div class="example" onclick="searchExample('saúde mental')">saúde mental</div>
+                <div class="example" onclick="searchExample('&quot;saúde pública&quot;')">"saúde pública"</div>
+                <div class="example" onclick="searchExample('pesquisa AND ética')">pesquisa AND ética</div>
+                <div class="example" onclick="searchExample('medicamento OR remédio')">medicamento OR remédio</div>
+                <div class="example" onclick="searchExample('hospital NOT privado')">hospital NOT privado</div>
+            </div>
+        </div>
+        
+        <div class="results-container" id="results-container">
+            <div class="results-header" id="results-header">
+                <!-- Header dinâmico -->
+            </div>
+            <div class="results-list" id="results-list">
+                <!-- Resultados dinâmicos -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const searchForm = document.getElementById('search-form');
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+        const resultsContainer = document.getElementById('results-container');
+        const resultsHeader = document.getElementById('results-header');
+        const resultsList = document.getElementById('results-list');
+
+        // Controle de debounce para busca em tempo real
+        let searchTimeout;
+
+        // Event listeners
+        searchForm.addEventListener('submit', handleSearch);
+        searchInput.addEventListener('input', handleInputChange);
+
+        function handleSearch(e) {
+            e.preventDefault();
+            performSearch();
+        }
+
+        function handleInputChange() {
+            clearTimeout(searchTimeout);
+            const query = searchInput.value.trim();
+            
+            if (query.length > 2) {
+                searchTimeout = setTimeout(performSearch, 500);
+            } else if (query.length === 0) {
+                hideResults();
+            }
+        }
+
+        function performSearch() {
+            const query = searchInput.value.trim();
+            
+            if (!query) {
+                hideResults();
+                return;
+            }
+
+            showLoading();
+
+            fetch(`/search?q=${encodeURIComponent(query)}&limit=50`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showError(data.error);
+                    } else {
+                        showResults(data);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro na busca:', error);
+                    showError('Erro ao realizar busca. Tente novamente.');
+                });
+        }
+
+        function showLoading() {
+            resultsContainer.style.display = 'block';
+            resultsHeader.innerHTML = '<div class="loading">🔍 Buscando...</div>';
+            resultsList.innerHTML = '';
+        }
+
+        function showResults(data) {
+            resultsContainer.style.display = 'block';
+            
+            // Header com informações da busca e botão de download
+            resultsHeader.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>Busca:</strong> "${data.query}" 
+                        <span style="color: #666; margin-left: 15px;">
+                            ${data.total} resultado${data.total !== 1 ? 's' : ''} encontrado${data.total !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+                    <button 
+                        id="download-csv-btn"
+                        data-query="${data.query.replace(/"/g, '&quot;')}"
+                        data-total="${data.total}"
+                        style="background: #4299e1; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 14px;"
+                        title="Baixar resultados em CSV">
+                        📥 Baixar CSV
+                    </button>
+                </div>
+            `;
+            
+            // Adiciona event listener ao botão de download
+            const downloadBtn = document.getElementById('download-csv-btn');
+            if (downloadBtn) {
+                downloadBtn.addEventListener('click', function() {
+                    const query = this.getAttribute('data-query');
+                    const total = parseInt(this.getAttribute('data-total'));
+                    downloadCSV(query, total);
+                });
+            }
+
+            // Lista de resultados
+            if (data.results.length === 0) {
+                resultsList.innerHTML = `
+                    <div style="padding: 40px; text-align: center; color: #666;">
+                        <p>Nenhum resultado encontrado para "${data.query}"</p>
+                        <p style="margin-top: 10px; font-size: 0.9em;">
+                            Tente usar termos diferentes ou operadores booleanos.
+                        </p>
+                    </div>
+                `;
+            } else {
+                resultsList.innerHTML = data.results.map(result => `
+                    <div class="result-item">
+                        <div class="result-title">
+                            <a href="${result.link}" target="_blank" rel="noopener noreferrer">
+                                ${highlightQuery(result.titulo, data.query)}
+                            </a>
+                        </div>
+                        <div class="result-meta">
+                            📅 ${result.data_publicacao || 'Data não informada'}
+                        </div>
+                        <div class="result-snippet">
+                            ${highlightQuery(result.snippet, data.query)}
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function showError(message) {
+            resultsContainer.style.display = 'block';
+            resultsHeader.innerHTML = '';
+            resultsList.innerHTML = `<div class="error">❌ ${message}</div>`;
+        }
+
+        function hideResults() {
+            resultsContainer.style.display = 'none';
+        }
+
+        function highlightQuery(text, query) {
+            if (!text || !query) return text;
+            
+            // Remove operadores booleanos e aspas para o highlight
+            const cleanQuery = query.replace(/\b(AND|OR|NOT)\b/gi, '')
+                                  .replace(/"/g, '')
+                                  .trim();
+            
+            if (!cleanQuery) return text;
+            
+            const words = cleanQuery.split(/\s+/).filter(word => word.length > 2);
+            let highlightedText = text;
+            
+            words.forEach(word => {
+                // Escapa caracteres especiais regex
+                const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`(${escapedWord})`, 'gi');
+                highlightedText = highlightedText.replace(regex, '<mark style="background: #fff3cd; padding: 2px;">$1</mark>');
+            });
+            
+            return highlightedText;
+        }
+
+        function searchExample(query) {
+            searchInput.value = query;
+            performSearch();
+        }
+
+        function downloadCSV(query, total) {
+            if (total === 0) {
+                alert('Não há resultados para baixar.');
+                return;
+            }
+            
+            console.log('Download CSV para query:', query);
+            
+            // Mostra feedback visual
+            const button = event.target;
+            const originalText = button.innerHTML;
+            button.innerHTML = '⏳ Baixando...';
+            button.disabled = true;
+            
+            // Constrói URL de download
+            const downloadUrl = `/download_csv?q=${encodeURIComponent(query)}&limit=100`;
+            console.log('URL de download:', downloadUrl);
+            
+            // Usa window.open para download ao invés de link temporário
+            try {
+                window.open(downloadUrl, '_blank');
+            } catch (error) {
+                console.error('Erro no download:', error);
+                alert('Erro ao fazer download. Tente novamente.');
+            }
+            
+            // Restaura botão após 2 segundos
+            setTimeout(() => {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }, 2000);
+        }
+
+        // Foco automático no campo de busca
+        searchInput.focus();
+    </script>
+</body>
+</html>
